@@ -434,6 +434,17 @@ func play_animation(anim_name: String) -> void:
 	if target_player.has_animation(mapped):
 		target_player.play(mapped)
 
+func is_galloping() -> bool:
+	var target_player: AnimationPlayer = shiba_anim_player if pet_type == "shiba" else cat_anim_player
+	if not target_player:
+		target_player = animation_player
+	if target_player and target_player.is_playing():
+		if target_player.current_animation.to_lower().begins_with("gallop"):
+			return true
+	if current_state_name == "Walk" and current_state and current_state.get("is_running") == true and pet_type == "shiba":
+		return true
+	return false
+
 ## Sets dynamic 3D heading smoothly (avoids flat 2D cardboard look)
 func set_facing_direction(dir: float) -> void:
 	facing_direction = signf(dir)
@@ -441,7 +452,10 @@ func set_facing_direction(dir: float) -> void:
 		facing_direction = 1.0
 
 	if current_state_name == "Walk":
-		target_rotation_y = deg_to_rad(70.0) if facing_direction > 0 else deg_to_rad(-70.0)
+		if is_galloping():
+			target_rotation_y = deg_to_rad(90.0) if facing_direction > 0 else deg_to_rad(-90.0)
+		else:
+			target_rotation_y = deg_to_rad(82.0) if facing_direction > 0 else deg_to_rad(-82.0)
 	elif current_state_name == "Sit":
 		target_rotation_y = deg_to_rad(25.0) if facing_direction > 0 else deg_to_rad(-25.0)
 	else:
@@ -452,9 +466,12 @@ func orient_toward_vector(dir: Vector2) -> void:
 	if dir.length_squared() < 0.001:
 		return
 	facing_direction = 1.0 if dir.x >= 0.0 else -1.0
-	var true_heading = atan2(dir.x, dir.y)
-	var view_biased_heading = lerp_angle(true_heading, 0.0, 0.18)
-	target_rotation_y = view_biased_heading
+	if is_galloping():
+		# Direct lateral heading (Left/Right) in screen plane; incline along ground slope is handled via target_pitch_x
+		target_rotation_y = deg_to_rad(90.0) if facing_direction > 0 else deg_to_rad(-90.0)
+	else:
+		# Subtle 3D perspective angle for casual stroll
+		target_rotation_y = deg_to_rad(85.0) if facing_direction > 0 else deg_to_rad(-85.0)
 
 ## Adjusts walk animation playback speed to match actual ground velocity (eliminates foot sliding)
 func set_walk_animation_speed(ratio: float) -> void:
@@ -637,18 +654,30 @@ func _update_procedural_animation(delta: float) -> void:
 			visual_root.scale = Vector3(1.0 + bob * 0.4, (1.0 - bob * 0.4) * blink_factor, 1.0 + bob * 0.4)
 
 		"Walk":
-			var trot = sin(_proc_anim_time * 13.0)
-			var bounce = absf(sin(_proc_anim_time * 13.0)) * 0.04
-			# Dynamic bank into turns based on turning rate
-			var angle_diff = wrapf(target_rotation_y - visual_root.rotation.y, -PI, PI)
-			var bank = clampf(-angle_diff * 0.25, -0.12, 0.12)
-			visual_root.position.y = bounce
-			visual_root.rotation.z = lerp_angle(visual_root.rotation.z, bank + trot * 0.03, delta * 9.0)
-			visual_root.rotation.x = lerp_angle(visual_root.rotation.x, 0.24, delta * 6.0)
-			# Cartoon squash and stretch on each step!
-			var sq_y = 1.0 - bounce * 0.8
-			var st_xz = 1.0 + bounce * 0.4
-			visual_root.scale = Vector3(st_xz, sq_y * blink_factor, st_xz)
+			var is_gallop = is_galloping()
+			if is_gallop:
+				# Gallop sprint: Natural skeletal animation handles spine and leg dynamics
+				# Pitch body along ground slope vector defined by start and end points
+				visual_root.rotation.x = lerp_angle(visual_root.rotation.x, target_pitch_x, delta * 8.0)
+				visual_root.position.y = lerpf(visual_root.position.y, 0.0, delta * 8.0)
+				# Dynamic bank into turns
+				var angle_diff = wrapf(target_rotation_y - visual_root.rotation.y, -PI, PI)
+				var bank = clampf(-angle_diff * 0.25, -0.10, 0.10)
+				visual_root.rotation.z = lerp_angle(visual_root.rotation.z, bank, delta * 9.0)
+				visual_root.scale = Vector3(1.0, blink_factor, 1.0)
+			else:
+				var trot = sin(_proc_anim_time * 13.0)
+				var bounce = absf(sin(_proc_anim_time * 13.0)) * 0.04
+				# Dynamic bank into turns based on turning rate
+				var angle_diff = wrapf(target_rotation_y - visual_root.rotation.y, -PI, PI)
+				var bank = clampf(-angle_diff * 0.25, -0.12, 0.12)
+				visual_root.position.y = bounce
+				visual_root.rotation.z = lerp_angle(visual_root.rotation.z, bank + trot * 0.03, delta * 9.0)
+				visual_root.rotation.x = lerp_angle(visual_root.rotation.x, target_pitch_x, delta * 6.0)
+				# Cartoon squash and stretch on each step!
+				var sq_y = 1.0 - bounce * 0.8
+				var st_xz = 1.0 + bounce * 0.4
+				visual_root.scale = Vector3(st_xz, sq_y * blink_factor, st_xz)
 
 		"Sit":
 			# Lower, cozy squat with tilted cute head

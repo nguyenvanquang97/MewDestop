@@ -43,6 +43,17 @@ const RUN_PRE_TURN_DURATION: float = 0.12 # Snappy turn when running
 
 # Organic wandering curve
 var _curve_amplitude: float = 0.0
+var _active_slope: float = 0.0
+
+func _update_ground_slope() -> void:
+	var delta_pos = target_pos - start_pos
+	if absf(delta_pos.x) > 1.0:
+		var slope = atan2(delta_pos.y, absf(delta_pos.x))
+		_active_slope = clampf(slope * 0.55, -deg_to_rad(28.0), deg_to_rad(28.0))
+	else:
+		_active_slope = 0.0
+	if cat:
+		cat.target_pitch_x = _active_slope
 
 func enter(_prev: String) -> void:
 	var rect = cat.screen_manager.get_walkable_screen_rect()
@@ -74,6 +85,7 @@ func enter(_prev: String) -> void:
 	current_speed = 0.0
 	_is_pre_turning = true
 	_turn_timer = 0.0
+	_update_ground_slope()
 
 	# Aim cat towards target direction FIRST
 	var initial_diff = target_pos - current_pos
@@ -96,6 +108,7 @@ func set_destination(dest: Vector2, run: bool = true) -> void:
 	_is_pre_turning = true
 	_turn_timer = 0.0
 	_curve_amplitude = 0.0 if run else randf_range(-15.0, 15.0)
+	_update_ground_slope()
 
 	var initial_diff = target_pos - current_pos
 	cat.orient_toward_vector(initial_diff)
@@ -103,7 +116,10 @@ func set_destination(dest: Vector2, run: bool = true) -> void:
 
 func exit() -> void:
 	is_running = false
-	cat.set_walk_animation_speed(1.0)
+	_active_slope = 0.0
+	if cat:
+		cat.target_pitch_x = 0.0
+		cat.set_walk_animation_speed(1.0)
 
 func update(delta: float) -> void:
 	var current_pos = Vector2(cat.current_screen_x, cat.current_screen_y)
@@ -129,6 +145,7 @@ func update(delta: float) -> void:
 		if is_running:
 			is_running = false
 			cat.show_emote("heart")
+		cat.target_pitch_x = 0.0
 		cat.change_state("Idle")
 		return
 
@@ -155,6 +172,10 @@ func update(delta: float) -> void:
 		# Smooth braking near destination
 		var decel_factor = clampf(dist / active_decel_dist, 0.18, 1.0)
 		target_speed = active_max_speed * decel_factor
+		# Smoothly level out body pitch as pet brakes to a halt at destination point
+		cat.target_pitch_x = lerpf(0.0, _active_slope, dist / active_decel_dist)
+	else:
+		cat.target_pitch_x = _active_slope
 
 	# Ramp up/down speed
 	current_speed = move_toward(current_speed, target_speed, active_accel * delta)
