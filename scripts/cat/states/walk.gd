@@ -142,10 +142,11 @@ func update(delta: float) -> void:
 
 	# Phase 2: Check arrival
 	if dist <= arrived_threshold:
+		cat.target_pitch_x = 0.0
 		if is_running:
 			is_running = false
-			cat.show_emote("heart")
-		cat.target_pitch_x = 0.0
+			cat.change_state("Pet")
+			return
 		cat.change_state("Idle")
 		return
 

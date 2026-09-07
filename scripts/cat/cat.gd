@@ -411,7 +411,8 @@ func play_animation(anim_name: String) -> void:
 			"sit": mapped = "Idle_2_HeadLow"
 			"drink", "eat", "sit_drink": mapped = "Eating"
 			"sleep": mapped = "Death"
-			"pet", "play", "dragged": mapped = "Jump_ToIdle"
+			"pet", "play", "happy", "smile", "tongue", "wag": mapped = "Happy_TongueWag"
+			"dragged": mapped = "Jump_ToIdle"
 			_:
 				if target_player.has_animation(anim_name):
 					mapped = anim_name
@@ -702,11 +703,18 @@ func _update_procedural_animation(delta: float) -> void:
 			visual_root.scale = Vector3(0.85, 1.25, 0.85)
 
 		"Pet":
-			# Rapid happy purr vibration + spring squash
-			var purr = sin(_proc_anim_time * 26.0) * 0.035
-			visual_root.position.y = absf(sin(_proc_anim_time * 8.0)) * 0.04
-			visual_root.rotation.z = purr
-			visual_root.scale = Vector3(1.15 + purr, 1.10 - purr, 1.15 + purr)
+			if pet_type == "shiba":
+				# Shiba smile: clean posture facing slightly towards camera
+				visual_root.rotation.x = lerp_angle(visual_root.rotation.x, 0.10, delta * 6.0)
+				visual_root.position.y = lerpf(visual_root.position.y, 0.0, delta * 6.0)
+				visual_root.rotation.z = lerp_angle(visual_root.rotation.z, 0.0, delta * 6.0)
+				visual_root.scale = Vector3(1.0, 1.0, 1.0)
+			else:
+				# Rapid happy purr vibration + spring squash
+				var purr = sin(_proc_anim_time * 26.0) * 0.035
+				visual_root.position.y = absf(sin(_proc_anim_time * 8.0)) * 0.04
+				visual_root.rotation.z = purr
+				visual_root.scale = Vector3(1.15 + purr, 1.10 - purr, 1.15 + purr)
 
 		"Drink":
 			# Soft natural posture standing beside bowl, gentle calm breathing
