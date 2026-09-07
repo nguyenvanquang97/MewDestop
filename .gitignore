@@ -1,0 +1,6 @@
+# Godot 4 .gitignore
+.godot/
+_sc_
+user_data/
+*.translation
+.DS_Store

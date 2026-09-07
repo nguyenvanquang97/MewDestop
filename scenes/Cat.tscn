@@ -1,0 +1,51 @@
+[gd_scene load_steps=8 format=3 uid="uid://c7t8x4cat001"]
+
+[ext_resource type="Script" path="res://scripts/cat/cat.gd" id="1_cat"]
+[ext_resource type="PackedScene" uid="uid://b1k4ruwuoky3d" path="res://assets/models/cat/cat_animated.glb" id="2_cat_model"]
+[ext_resource type="PackedScene" path="res://scenes/ui/EmoteBubble.tscn" id="3_emote"]
+[ext_resource type="PackedScene" uid="uid://b0waho1nlrvm5" path="res://assets/models/shiba/ShibaInu.glb" id="4_shiba_model"]
+
+[sub_resource type="Gradient" id="Gradient_Shadow"]
+colors = PackedColorArray(0, 0, 0, 0.45, 0, 0, 0, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_Shadow"]
+gradient = SubResource("Gradient_Shadow")
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(0.5, 0)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Shadow"]
+transparency = 1
+shading_mode = 0
+albedo_texture = SubResource("GradientTexture2D_Shadow")
+
+[sub_resource type="PlaneMesh" id="Plane_Shadow"]
+material = SubResource("Mat_Shadow")
+size = Vector2(1.2, 0.9)
+
+[sub_resource type="SphereShape3D" id="Shape_Hitbox"]
+radius = 0.55
+
+[node name="Cat" type="Node3D"]
+script = ExtResource("1_cat")
+
+[node name="DropShadow" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
+mesh = SubResource("Plane_Shadow")
+
+[node name="VisualRoot" type="Node3D" parent="."]
+
+[node name="CatModel" parent="VisualRoot" instance=ExtResource("2_cat_model")]
+transform = Transform3D(-0.08, 0, 0, 0, 0.08, 0, 0, 0, -0.08, 0, 0, 0)
+
+[node name="ShibaModel" parent="VisualRoot" instance=ExtResource("4_shiba_model")]
+transform = Transform3D(0.33, 0, 0, 0, 0.33, 0, 0, 0, 0.33, 0, 0, 0)
+visible = false
+
+[node name="EmoteBubble" parent="." instance=ExtResource("3_emote")]
+
+[node name="Area3D" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.45, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Area3D"]
+shape = SubResource("Shape_Hitbox")

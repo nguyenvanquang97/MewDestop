@@ -1,0 +1,61 @@
+[gd_scene load_steps=8 format=3 uid="uid://c7tx4milkd001"]
+
+[ext_resource type="Script" path="res://scripts/items/milk_bowl.gd" id="1_mbowl"]
+[ext_resource type="PackedScene" uid="uid://bq0gdyjtla3cv" path="res://assets/models/items/ceramic_bowl.glb" id="2_mmodel"]
+
+[sub_resource type="Gradient" id="Gradient_Shadow"]
+colors = PackedColorArray(0, 0, 0, 0.40, 0, 0, 0, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_Shadow"]
+gradient = SubResource("Gradient_Shadow")
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(0.5, 0)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Shadow"]
+transparency = 1
+shading_mode = 0
+albedo_texture = SubResource("GradientTexture2D_Shadow")
+
+[sub_resource type="PlaneMesh" id="Plane_Shadow"]
+material = SubResource("Mat_Shadow")
+size = Vector2(0.55, 0.55)
+
+[sub_resource type="StandardMaterial3D" id="Mat_Droplets"]
+shading_mode = 1
+albedo_color = Color(1, 0.99, 0.95, 1)
+
+[sub_resource type="SphereMesh" id="Mesh_Droplet"]
+material = SubResource("Mat_Droplets")
+radius = 0.009
+height = 0.018
+radial_segments = 8
+rings = 4
+
+[node name="MilkBowl" type="Node3D"]
+script = ExtResource("1_mbowl")
+
+[node name="DropShadow" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.003, 0)
+mesh = SubResource("Plane_Shadow")
+
+[node name="ModelRoot" parent="." instance=ExtResource("2_mmodel")]
+
+[node name="SplashParticles" type="CPUParticles3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.09, 0)
+emitting = false
+amount = 10
+lifetime = 0.35
+explosiveness = 0.2
+randomness = 0.3
+lifetime_randomness = 0.25
+mesh = SubResource("Mesh_Droplet")
+emission_shape = 1
+emission_sphere_radius = 0.06
+direction = Vector3(0, 1, 0)
+spread = 30.0
+initial_velocity_min = 0.25
+initial_velocity_max = 0.50
+gravity = Vector3(0, -2.5, 0)
+scale_amount_min = 0.4
+scale_amount_max = 0.9
