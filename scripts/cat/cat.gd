@@ -132,6 +132,9 @@ func _setup_shiba_animations() -> void:
 	if shiba_anim_player.has_animation("Death"):
 		var d = shiba_anim_player.get_animation("Death")
 		d.loop_mode = Animation.LOOP_NONE
+	if shiba_anim_player.has_animation("Gallop_Jump"):
+		var gj = shiba_anim_player.get_animation("Gallop_Jump")
+		gj.loop_mode = Animation.LOOP_NONE
 	if not shiba_anim_player.animation_finished.is_connected(_on_animation_finished):
 		shiba_anim_player.animation_finished.connect(_on_animation_finished)
 
@@ -161,7 +164,11 @@ func _setup_shiba_materials() -> void:
 
 func _on_animation_finished(anim_name: String) -> void:
 	if current_state_name == "Walk":
-		play_animation("walk")
+		var walk_state: WalkState = states.get("Walk") as WalkState
+		if walk_state and walk_state.is_running and pet_type == "shiba" and walk_state.total_distance >= 1000.0:
+			play_animation("Gallop")
+		else:
+			play_animation("walk")
 	elif current_state_name == "Idle":
 		play_animation("idle")
 	elif current_state_name == "Sit":
@@ -344,10 +351,10 @@ func show_milk_bowl(show: bool) -> void:
 		var yaw = target_rotation_y
 		var heading = Vector3(sin(yaw), 0.0, cos(yaw))
 		# Place bowl right on floor plane where paws rest, centered in front
-		var dist = 0.52 if pet_type == "shiba" else 0.44
+		var dist = 0.92 if pet_type == "shiba" else 0.44
 		milk_bowl.position = heading * dist
-		milk_bowl.position.y = 0.0
-		milk_bowl.rotation = Vector3(0.18, yaw, 0.0)
+		milk_bowl.position.y = -0.135 if pet_type == "shiba" else 0.0
+		milk_bowl.rotation = Vector3(0.0, yaw, 0.0)
 		milk_bowl.pop_in()
 	else:
 		milk_bowl.pop_out()
@@ -399,6 +406,7 @@ func play_animation(anim_name: String) -> void:
 		match mapped:
 			"walk", "run": mapped = "Walk"
 			"gallop": mapped = "Gallop"
+			"gallop_jump", "jump": mapped = "Gallop_Jump"
 			"idle": mapped = "Idle"
 			"sit": mapped = "Idle_2_HeadLow"
 			"drink", "eat", "sit_drink": mapped = "Eating"
@@ -528,6 +536,32 @@ func get_screen_bounding_rect() -> Rect2:
 		rect = rect.merge(bowl_rect)
 	return rect
 
+## Orders the pet to rush/sprint towards the specified 2D screen coordinate
+func run_to(screen_pos: Vector2) -> void:
+	if not screen_manager:
+		return
+
+	var target = screen_manager.clamp_screen_pos(screen_pos)
+
+	# If currently drinking or sleeping, interrupt immediately and pack bowl
+	if milk_bowl and milk_bowl.visible:
+		show_milk_bowl(false)
+
+	# Snappy alert emote
+	show_emote("❗")
+
+	var walk_state: WalkState = states.get("Walk") as WalkState
+	if not walk_state:
+		return
+
+	if current_state_name == "Walk":
+		walk_state.set_destination(target, true)
+	else:
+		walk_state.has_target_override = true
+		walk_state.target_override = target
+		walk_state.is_running = true
+		change_state("Walk")
+
 ## Resets mouse down/drag tracking so pending clicks or drags are aborted
 func cancel_mouse_interaction() -> void:
 	is_mouse_down_on_cat = false
@@ -559,6 +593,9 @@ func handle_mouse_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			if hit_rect.has_point(mouse_pos):
 				right_clicked.emit(mouse_pos)
+
+		elif event.button_index == MOUSE_BUTTON_MIDDLE and event.pressed:
+			run_to(mouse_pos)
 
 	elif event is InputEventMouseMotion:
 		if is_mouse_down_on_cat and current_state_name != "Dragged":

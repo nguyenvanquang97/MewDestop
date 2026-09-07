@@ -12,6 +12,7 @@ if [ -n "$PREV_PIDS" ]; then
     echo "$PREV_PIDS" | xargs kill 2>/dev/null || true
     sleep 0.3
 fi
+pkill -f "python.*mouse_listener.py" 2>/dev/null || true
 
 # Find Godot executable
 if command -v godot &> /dev/null; then
