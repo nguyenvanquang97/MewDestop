@@ -19,6 +19,16 @@ var _mouse_udp: PacketPeerUDP = null
 var _mouse_listener_pid: int = -1
 const MOUSE_LISTENER_PORT: int = 45455
 
+# Middle-click double-click detection constants and state
+const MIDDLE_DOUBLE_CLICK_MIN_TIME: float = 0.08  # 80ms min debounce to filter duplicate UDP/input events
+const MIDDLE_DOUBLE_CLICK_MAX_TIME: float = 0.35  # 350ms window for double-click
+const MIDDLE_DOUBLE_CLICK_DIST_SQ: float = 3600.0 # 60px max travel between clicks
+
+var _pending_middle_click: bool = false
+var _last_middle_click_time: float = -10.0
+var _last_middle_click_pos: Vector2 = Vector2.ZERO
+var _last_middle_screen_id: int = 0
+
 func _ready() -> void:
 	print("[Main] Initializing NekoDesk 3D...")
 	
@@ -65,6 +75,12 @@ func _process(delta: float) -> void:
 	# Process global mouse wheel clicks from helper
 	_process_mouse_udp()
 
+	# Middle-click single-click timeout check
+	if _pending_middle_click:
+		var now = Time.get_ticks_msec() / 1000.0
+		if now - _last_middle_click_time > MIDDLE_DOUBLE_CLICK_MAX_TIME:
+			_execute_single_middle_click()
+
 	# Periodic autosave
 	_save_timer += delta
 	if _save_timer >= AUTO_SAVE_INTERVAL:
@@ -83,6 +99,10 @@ func _process(delta: float) -> void:
 				var coords = cmd.replace("run_to:", "").split(",")
 				if coords.size() >= 2:
 					cat.run_to(Vector2(coords[0].to_float(), coords[1].to_float()))
+			elif cmd.begins_with("throw_ball_to:"):
+				var coords = cmd.replace("throw_ball_to:", "").split(",")
+				if coords.size() >= 2:
+					cat.throw_ball_to(Vector2(coords[0].to_float(), coords[1].to_float()))
 			else:
 				match cmd:
 					"drink", "drink_milk":
@@ -91,7 +111,9 @@ func _process(delta: float) -> void:
 						_on_menu_action("feed")
 					"sleep":
 						_on_menu_action("sleep")
-					"walk", "play":
+					"walk":
+						cat.change_state("Walk")
+					"play", "ball", "fetch", "throw_ball":
 						_on_menu_action("play")
 					"run":
 						cat.run_to(Vector2(cat.current_screen_x + 300.0, cat.current_screen_y))
@@ -105,6 +127,8 @@ func _process(delta: float) -> void:
 					"cat":
 						cat.set_pet_type("cat")
 						_save_current_state()
+					"switch_screen", "toggle_screen":
+						_on_menu_action("switch_screen")
 					"drink_capture":
 						_on_menu_action("drink_milk")
 						get_tree().create_timer(1.5).timeout.connect(func():
@@ -143,6 +167,11 @@ func _input(event: InputEvent) -> void:
 			_on_menu_action("feed")
 		elif event.keycode == KEY_C:
 			_on_menu_action("switch_pet")
+		elif event.keycode == KEY_P:
+			_on_menu_action("play")
+		elif event.keycode == KEY_B:
+			# 'B' hotkey: Throw ball directly to mouse position
+			_trigger_ball_at_cursor()
 		elif event.keycode == KEY_M:
 			# 'M' hotkey: Run to current mouse cursor position
 			_handle_middle_click_global()
@@ -197,8 +226,7 @@ func _on_menu_action(action: String) -> void:
 		"drink_milk":
 			cat.change_state("Drink")
 		"play":
-			cat.show_emote("play")
-			cat.change_state("Walk")
+			cat.change_state("Play")
 		"sleep":
 			cat.change_state("Sleep")
 		"pet":
@@ -252,6 +280,12 @@ func _handle_middle_click_global() -> void:
 		return
 
 	var global_mouse = DisplayServer.mouse_get_position()
+	var now = Time.get_ticks_msec() / 1000.0
+	var dt = now - _last_middle_click_time
+
+	# Reject duplicate events arriving within 80ms (e.g. UDP & window event firing on same click)
+	if dt < MIDDLE_DOUBLE_CLICK_MIN_TIME:
+		return
 
 	# Determine which screen the mouse cursor is currently on
 	var target_screen = window_manager.current_screen_id
@@ -270,18 +304,46 @@ func _handle_middle_click_global() -> void:
 
 	var cur_screen = window_manager.current_screen_id
 	var screen_pos = DisplayServer.screen_get_position(cur_screen)
-	var local_x = float(global_mouse.x - screen_pos.x)
-	var local_y = float(global_mouse.y - screen_pos.y)
-
-	print("[Main] Middle click at global %s -> screen %d local (%.1f, %.1f)" % [
-		global_mouse, cur_screen, local_x, local_y
-	])
+	var local_pos = Vector2(float(global_mouse.x - screen_pos.x), float(global_mouse.y - screen_pos.y))
 
 	# If context menu was open, close it
 	if context_menu and context_menu.visible:
 		context_menu.close_menu()
 
-	cat.run_to(Vector2(local_x, local_y))
+	# Check for double click:
+	if _pending_middle_click and dt <= MIDDLE_DOUBLE_CLICK_MAX_TIME and cur_screen == _last_middle_screen_id and local_pos.distance_squared_to(_last_middle_click_pos) <= MIDDLE_DOUBLE_CLICK_DIST_SQ:
+		# Double-click confirmed: THROW BALL!
+		_pending_middle_click = false
+		print("[Main] Middle DOUBLE-CLICK at screen %d local (%.1f, %.1f) -> THROW BALL" % [
+			cur_screen, local_pos.x, local_pos.y
+		])
+		cat.throw_ball_to(local_pos)
+	else:
+		# If previous click was still pending (e.g. clicked far away), fire it first
+		if _pending_middle_click:
+			_execute_single_middle_click()
+
+		_pending_middle_click = true
+		_last_middle_click_time = now
+		_last_middle_click_pos = local_pos
+		_last_middle_screen_id = cur_screen
+
+func _execute_single_middle_click() -> void:
+	_pending_middle_click = false
+	print("[Main] Middle SINGLE-CLICK at screen %d local (%.1f, %.1f) -> RUN TO" % [
+		_last_middle_screen_id, _last_middle_click_pos.x, _last_middle_click_pos.y
+	])
+	cat.run_to(_last_middle_click_pos)
+
+func _trigger_ball_at_cursor() -> void:
+	if not window_manager or not cat:
+		return
+	var global_mouse = DisplayServer.mouse_get_position()
+	var cur_screen = window_manager.current_screen_id
+	var screen_pos = DisplayServer.screen_get_position(cur_screen)
+	var local_pos = Vector2(float(global_mouse.x - screen_pos.x), float(global_mouse.y - screen_pos.y))
+	print("[Main] Throw ball hotkey at screen %d local (%.1f, %.1f)" % [cur_screen, local_pos.x, local_pos.y])
+	cat.throw_ball_to(local_pos)
 
 func _exit_tree() -> void:
 	_cleanup()

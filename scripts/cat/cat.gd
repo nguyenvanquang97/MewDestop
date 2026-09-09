@@ -18,12 +18,22 @@ signal right_clicked(screen_pos: Vector2)
 
 var pet_type: String = "cat" # "cat" or "shiba"
 var _shiba_initialized: bool = false
+var shiba_mesh_inst: MeshInstance3D = null
 
 var states: Dictionary = {}
 var current_state: CatState
 var current_state_name: String = ""
 
 const DrinkState = preload("res://scripts/cat/states/drink.gd")
+
+# Kinematics & Stride Synchronization Constants
+const V_NATURAL_WALK: float = 82.3 # Natural zero-sliding velocity for Walk at 1.0x (px/s)
+const V_NATURAL_GALLOP: float = 270.0 # Natural zero-sliding velocity for Gallop at 1.0x (px/s with spine extension)
+const WALK_PACE_SPEED: float = 180.0
+const MIN_SPRINT_SPEED: float = 650.0 # Minimum sprint velocity when gallop engages (px/s)
+const MAX_SPRINT_SPEED: float = 1100.0 # Top sprint velocity across large 4K screens (px/s)
+const SPRINT_ALPHA: float = 15.0 # Distance acceleration scaling coefficient
+const DECEL_DISTANCE: float = 85.0 # Distance to begin braking (px)
 
 var behavior: CatBehaviorConfig = CatBehaviorConfig.new()
 var stats: CatStats = CatStats.new()
@@ -59,6 +69,10 @@ var _proc_anim_time: float = 0.0
 const MilkBowlScene = preload("res://scenes/items/MilkBowl.tscn")
 var milk_bowl: MilkBowlItem = null
 
+const ToyBallScene = preload("res://scenes/items/ToyBall.tscn")
+var toy_ball: ToyBallItem = null
+var shiba_head_attachment: BoneAttachment3D = null
+
 var skeleton: Skeleton3D = null
 var neck_bone_idx: int = -1
 var head_bone_idx: int = -1
@@ -76,6 +90,7 @@ func _ready() -> void:
 	_setup_shiba_animations()
 	_setup_shiba_materials()
 	_setup_milk_bowl()
+	_setup_toy_ball()
 	_setup_states()
 	set_pet_type(pet_type)
 
@@ -101,6 +116,7 @@ func set_pet_type(type: String) -> void:
 		animation_player = shiba_anim_player
 		_setup_shiba_animations()
 		_setup_shiba_materials()
+		_setup_shiba_attachment()
 	else:
 		if cat_model:
 			cat_model.visible = true
@@ -330,6 +346,7 @@ func _setup_states() -> void:
 	states["Dragged"] = DraggedState.new()
 	states["Pet"] = PetState.new()
 	states["Drink"] = DrinkState.new()
+	states["Play"] = PlayState.new()
 
 	for state_name in states:
 		var s: CatState = states[state_name]
@@ -343,6 +360,50 @@ func _setup_milk_bowl() -> void:
 	milk_bowl = MilkBowlScene.instantiate()
 	milk_bowl.visible = false
 	add_child(milk_bowl)
+
+func _setup_toy_ball() -> void:
+	if toy_ball:
+		toy_ball.queue_free()
+	toy_ball = ToyBallScene.instantiate()
+	toy_ball.visible = false
+	add_child(toy_ball)
+	_setup_shiba_attachment()
+
+func _setup_shiba_attachment() -> void:
+	if not shiba_model:
+		shiba_model = get_node_or_null("VisualRoot/ShibaModel")
+	if shiba_model:
+		var skel: Skeleton3D = shiba_model.find_child("Skeleton3D", true, false)
+		if skel:
+			if not shiba_head_attachment:
+				shiba_head_attachment = BoneAttachment3D.new()
+				shiba_head_attachment.name = "ShibaHeadAttachment"
+				skel.add_child(shiba_head_attachment)
+			if skel.find_bone("Head") >= 0:
+				shiba_head_attachment.bone_name = "Head"
+				shiba_head_attachment.bone_idx = skel.find_bone("Head")
+			elif skel.find_bone("Jaw") >= 0:
+				shiba_head_attachment.bone_name = "Jaw"
+				shiba_head_attachment.bone_idx = skel.find_bone("Jaw")
+
+func get_mouth_attach_node() -> Node3D:
+	if pet_type == "shiba":
+		if not shiba_head_attachment:
+			_setup_shiba_attachment()
+		if shiba_head_attachment:
+			return shiba_head_attachment
+	return visual_root
+
+func get_mouth_attach_offset() -> Vector3:
+	if pet_type == "shiba":
+		# Relative offset from bone attachment to center of mouth cavity
+		if shiba_head_attachment and shiba_head_attachment.bone_name == "Head":
+			# Exact mouth cavity center between upper snout and lower jaw
+			return Vector3(0.0, 0.643, -0.108)
+		if shiba_head_attachment and shiba_head_attachment.bone_name == "Jaw":
+			return Vector3(0.0, 0.27, 0.04)
+		return Vector3(0.0, 0.643, -0.108)
+	return Vector3(0.0, 0.25, 0.35)
 
 func show_milk_bowl(show: bool) -> void:
 	if not milk_bowl:
@@ -413,6 +474,8 @@ func play_animation(anim_name: String) -> void:
 			"sleep": mapped = "Death"
 			"pet", "play", "happy", "smile", "tongue", "wag": mapped = "Happy_TongueWag"
 			"dragged": mapped = "Jump_ToIdle"
+			"fetch_chomp", "chomp", "bite": mapped = "Fetch_Chomp"
+			"fetch_celebrate", "celebrate_hold_ball", "hold_ball": mapped = "Fetch_Celebrate_HoldBall"
 			_:
 				if target_player.has_animation(anim_name):
 					mapped = anim_name
@@ -434,6 +497,12 @@ func play_animation(anim_name: String) -> void:
 
 	if target_player.has_animation(mapped):
 		target_player.play(mapped)
+		if pet_type == "shiba":
+			if not shiba_mesh_inst:
+				shiba_mesh_inst = find_child("ShibaInu", true, false)
+			if shiba_mesh_inst and shiba_mesh_inst.get_blend_shape_count() > 0:
+				var is_smiling = (mapped == "Happy_TongueWag")
+				shiba_mesh_inst.set_blend_shape_value(0, 1.0 if is_smiling else 0.0)
 
 func is_galloping() -> bool:
 	var target_player: AnimationPlayer = shiba_anim_player if pet_type == "shiba" else cat_anim_player
@@ -459,6 +528,12 @@ func set_facing_direction(dir: float) -> void:
 			target_rotation_y = deg_to_rad(82.0) if facing_direction > 0 else deg_to_rad(-82.0)
 	elif current_state_name == "Sit":
 		target_rotation_y = deg_to_rad(25.0) if facing_direction > 0 else deg_to_rad(-25.0)
+	elif current_state_name == "Play":
+		var play_state = states.get("Play")
+		if play_state and play_state.current_phase == PlayState.Phase.CELEBRATING:
+			target_rotation_y = deg_to_rad(15.0) if facing_direction > 0 else deg_to_rad(-15.0)
+		else:
+			target_rotation_y = deg_to_rad(90.0) if facing_direction > 0 else deg_to_rad(-90.0)
 	else:
 		target_rotation_y = deg_to_rad(15.0) if facing_direction > 0 else deg_to_rad(-15.0)
 
@@ -481,6 +556,50 @@ func set_walk_animation_speed(ratio: float) -> void:
 		target_player = animation_player
 	if target_player:
 		target_player.speed_scale = clampf(ratio, 0.35, 1.5)
+
+## Unified locomotion kinematics calculator:
+## Computes distance-scaled velocity, acceleration, smooth braking,
+## and automatically synchronizes leg animation playback speed to eliminate foot-sliding.
+func calculate_locomotion_step(
+	current_speed: float,
+	dist_remaining: float,
+	total_dist: float,
+	delta: float,
+	is_sprint: bool
+) -> Dictionary:
+	var max_speed: float
+	var accel: float
+	var decel_dist: float
+
+	if is_sprint:
+		max_speed = clampf(MIN_SPRINT_SPEED + SPRINT_ALPHA * sqrt(total_dist), MIN_SPRINT_SPEED, MAX_SPRINT_SPEED)
+		accel = max_speed * 2.8
+		decel_dist = DECEL_DISTANCE * 1.6
+	else:
+		max_speed = 120.0
+		accel = 240.0
+		decel_dist = DECEL_DISTANCE
+
+	var target_speed = max_speed
+	if dist_remaining < decel_dist:
+		var factor = clampf(dist_remaining / decel_dist, 0.18, 1.0)
+		target_speed = max_speed * factor
+
+	var new_speed = move_toward(current_speed, target_speed, accel * delta)
+
+	# Synchronize leg animation playback speed to actual ground velocity
+	if is_sprint:
+		var gallop_ratio = clampf(new_speed / V_NATURAL_GALLOP, 0.85, 1.35)
+		set_walk_animation_speed(gallop_ratio)
+	else:
+		var walk_ratio = clampf(new_speed / V_NATURAL_WALK, 0.75, 1.4)
+		set_walk_animation_speed(walk_ratio)
+
+	var step_dist = minf(new_speed * delta, dist_remaining)
+	return {
+		"new_speed": new_speed,
+		"step_dist": step_dist
+	}
 
 ## Smoothly turns cat to look towards mouse cursor when idle or sitting
 func _update_look_at_cursor(_delta: float) -> void:
@@ -506,8 +625,11 @@ func _update_blinking(delta: float) -> void:
 	if _blink_timer <= 0.0:
 		_is_blinking = true
 		_blink_timer = randf_range(2.8, 5.5)
-		# Blink finishes after short duration
-		get_tree().create_timer(_blink_duration).timeout.connect(func(): _is_blinking = false)
+		var tree = get_tree()
+		if tree:
+			tree.create_timer(_blink_duration).timeout.connect(func(): _is_blinking = false)
+		else:
+			_is_blinking = false
 
 ## Shows floating animated 3D emote icon (❤️, 💤, 🐟, ❓, 💧, ✨)
 func show_emote(type: String) -> void:
@@ -579,6 +701,27 @@ func run_to(screen_pos: Vector2) -> void:
 		walk_state.target_override = target
 		walk_state.is_running = true
 		change_state("Walk")
+
+## Throws a toy ball directly to the specified screen coordinate (first bounce location)
+func throw_ball_to(screen_pos: Vector2) -> void:
+	if not screen_manager:
+		return
+
+	# If drinking milk or eating, cancel and pack up bowl
+	if milk_bowl and milk_bowl.visible:
+		show_milk_bowl(false)
+
+	var play_state: PlayState = states.get("Play") as PlayState
+	if not play_state:
+		return
+
+	play_state.custom_first_bounce_screen = screen_pos
+
+	if current_state_name == "Play":
+		play_state.exit()
+		play_state.enter("Play")
+	else:
+		change_state("Play")
 
 ## Resets mouse down/drag tracking so pending clicks or drags are aborted
 func cancel_mouse_interaction() -> void:
