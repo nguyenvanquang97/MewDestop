@@ -35,7 +35,7 @@ const SLICES: Array[Dictionary] = [
 		"action": "drink_milk",
 		"icon": "🥛",
 		"title": "UỐNG SỮA",
-		"desc": "+25 NO NÊ  •  +20 THỂ LỰC",
+		"desc": "+55 GIẢI KHÁT  •  +20 THỂ LỰC",
 		"color": Color(0.92, 0.95, 1.0) # Cream White Milk
 	},
 	{

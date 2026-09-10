@@ -44,7 +44,8 @@ func update(delta: float) -> void:
 			_lapping_active = false
 			cat.set_milk_bowl_lapping(false)
 			cat.show_emote("heart")
-			cat.stats.modify_stat("hunger", -30.0)
+			cat.stats.modify_stat("thirst", -55.0)
+			cat.stats.modify_stat("hunger", -15.0)
 			cat.stats.modify_stat("energy", 20.0)
 			cat.stats.modify_stat("happiness", 25.0)
 

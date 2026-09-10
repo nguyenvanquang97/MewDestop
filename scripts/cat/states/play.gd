@@ -14,7 +14,8 @@ enum Phase {
 	CHASING,       # sprints excitedly with Gallop towards ball target
 	CATCHING,      # pounces and bites the ball (Attack animation)
 	CELEBRATING,   # Happy_TongueWag wagging tail and squinting smile
-	FINISHED       # pop out ball and return to Idle
+	FINISHED,      # pop out ball and return to Idle
+	REFUSAL        # Pet is hungry/thirsty/exhausted: refuses to chase, sighs, ball pops out
 }
 
 var current_phase: Phase = Phase.ANTICIPATION
@@ -38,9 +39,24 @@ func enter(_prev: String) -> void:
 	phase_timer = 0.0
 	ball_snapped = false
 
-	# 1. Pop excited emote
-	cat.show_emote("play")
-	cat.play_animation("idle")
+	# 1. Pop excited emote or refusal emote
+	var is_tired = cat.stats and cat.stats.is_exhausted()
+	if is_tired:
+		current_phase = Phase.REFUSAL
+		if cat.stats.thirst >= 75.0:
+			cat.show_emote("milk")
+		elif cat.stats.hunger >= 75.0:
+			cat.show_emote("hungry")
+		else:
+			cat.show_emote("sweat")
+		if cat.pet_type == "shiba":
+			cat.play_animation("Idle_2_HeadLow")
+		else:
+			cat.play_animation("idle")
+	else:
+		current_phase = Phase.ANTICIPATION
+		cat.show_emote("play")
+		cat.play_animation("idle")
 
 	# 2. Determine throw target on screen
 	var rect = cat.screen_manager.get_walkable_screen_rect()
@@ -104,6 +120,19 @@ func update(delta: float) -> void:
 	phase_timer += delta
 
 	match current_phase:
+		Phase.REFUSAL:
+			# Ball throws out so player sees where it went
+			if phase_timer >= 0.28 and (cat.toy_ball and not cat.toy_ball.visible):
+				_start_throw()
+			# At t >= 1.0s show sweat emote
+			if phase_timer >= 1.1 and phase_timer < 1.15:
+				cat.show_emote("sweat")
+				if cat.pet_type == "shiba":
+					cat.play_animation("Idle_2_HeadLow")
+			# After ball lands, pop out ball and return to Idle
+			if phase_timer >= 2.3:
+				_finish_play()
+
 		Phase.ANTICIPATION:
 			if phase_timer >= 0.28:
 				_start_throw()
@@ -233,9 +262,11 @@ func _start_celebration() -> void:
 	cat.play_animation("fetch_celebrate" if cat.pet_type == "shiba" else "idle")
 	cat.show_emote("heart")
 
-	# Stat boosts
+	# Stat boosts and exercise burn
 	cat.stats.modify_stat("happiness", 35.0)
-	cat.stats.modify_stat("energy", -8.0)
+	cat.stats.modify_stat("energy", -12.0)
+	cat.stats.modify_stat("thirst", 10.0)
+	cat.stats.modify_stat("hunger", 6.0)
 	cat.stats.modify_stat("affection", 15.0)
 
 func _finish_play() -> void:

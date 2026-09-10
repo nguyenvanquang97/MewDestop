@@ -21,18 +21,20 @@ func decide_next_state(mood: String = "NORMAL") -> String:
 
 	# Modulate weights by mood
 	match mood:
-		"TIRED":
-			w_sleep *= 3.0
-			w_walk *= 0.3
+		"TIRED", "EXHAUSTED":
+			w_sleep *= 4.0
+			w_sit *= 2.5
+			w_walk = 0.0 # Refuses to wander when exhausted
+		"HUNGRY", "THIRSTY":
+			w_sit *= 3.0
+			w_sleep *= 2.0
+			w_walk = 0.0 # Refuses to wander when starving or thirsty
 		"HAPPY", "EXCITED":
 			w_walk *= 1.8
 			w_sleep *= 0.4
-		"HUNGRY":
-			w_sit *= 1.5
-			w_sleep *= 0.5
 		"SAD":
 			w_sit *= 1.8
-			w_walk *= 0.5
+			w_walk *= 0.4
 
 	var total = w_walk + w_sit + w_sleep + w_idle
 	var roll = randf_range(0.0, total)

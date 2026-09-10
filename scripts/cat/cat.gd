@@ -682,6 +682,22 @@ func run_to(screen_pos: Vector2) -> void:
 		return
 
 	var target = screen_manager.clamp_screen_pos(screen_pos)
+	var current_pos = Vector2(current_screen_x, current_screen_y)
+	var dist = (target - current_pos).length()
+
+	# If exhausted, refuse to sprint long distances!
+	if stats and stats.is_exhausted():
+		if dist > 320.0:
+			if stats.thirst >= 75.0:
+				show_emote("milk")
+			elif stats.hunger >= 75.0:
+				show_emote("hungry")
+			else:
+				show_emote("sweat")
+			if pet_type == "shiba":
+				play_animation("Idle_2_HeadLow")
+			orient_toward_vector(target - current_pos)
+			return
 
 	# If currently drinking or sleeping, interrupt immediately and pack bowl
 	if milk_bowl and milk_bowl.visible:
@@ -694,12 +710,16 @@ func run_to(screen_pos: Vector2) -> void:
 	if not walk_state:
 		return
 
+	var should_run = true
+	if stats and stats.is_exhausted():
+		should_run = false
+
 	if current_state_name == "Walk":
-		walk_state.set_destination(target, true)
+		walk_state.set_destination(target, should_run)
 	else:
 		walk_state.has_target_override = true
 		walk_state.target_override = target
-		walk_state.is_running = true
+		walk_state.is_running = should_run
 		change_state("Walk")
 
 ## Throws a toy ball directly to the specified screen coordinate (first bounce location)

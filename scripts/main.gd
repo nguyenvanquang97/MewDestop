@@ -103,8 +103,27 @@ func _process(delta: float) -> void:
 				var coords = cmd.replace("throw_ball_to:", "").split(",")
 				if coords.size() >= 2:
 					cat.throw_ball_to(Vector2(coords[0].to_float(), coords[1].to_float()))
+			elif cmd.begins_with("set_hunger:"):
+				var val = cmd.replace("set_hunger:", "").to_float()
+				cat.stats.hunger = val
+				cat.stats.recalculate_mood()
+				print("[IPC] Pet hunger set to: ", val, " mood: ", cat.stats.current_mood, " is_exhausted: ", cat.stats.is_exhausted())
+			elif cmd.begins_with("set_thirst:"):
+				var val = cmd.replace("set_thirst:", "").to_float()
+				cat.stats.thirst = val
+				cat.stats.recalculate_mood()
+				print("[IPC] Pet thirst set to: ", val, " mood: ", cat.stats.current_mood, " is_exhausted: ", cat.stats.is_exhausted())
+			elif cmd.begins_with("set_energy:"):
+				var val = cmd.replace("set_energy:", "").to_float()
+				cat.stats.energy = val
+				cat.stats.recalculate_mood()
+				print("[IPC] Pet energy set to: ", val, " mood: ", cat.stats.current_mood, " is_exhausted: ", cat.stats.is_exhausted())
 			else:
 				match cmd:
+					"get_stats":
+						print("[IPC] STATS -> Hunger: %.1f, Thirst: %.1f, Energy: %.1f, Mood: %s, Exhausted: %s" % [
+							cat.stats.hunger, cat.stats.thirst, cat.stats.energy, cat.stats.current_mood, str(cat.stats.is_exhausted())
+						])
 					"drink", "drink_milk":
 						_on_menu_action("drink_milk")
 					"feed":
@@ -134,14 +153,14 @@ func _process(delta: float) -> void:
 						get_tree().create_timer(1.5).timeout.connect(func():
 							var img = get_viewport().get_texture().get_image()
 							if img:
-								img.save_png("/Users/macbook/.gemini/antigravity-ide/brain/775a4a21-a944-4fea-ac01-52918f0dae09/shiba_eating_captured_live.png")
+								img.save_png("/Users/macbook/.gemini/antigravity-ide/brain/acb36d71-6448-4b9e-a262-8d051bcf2860/shiba_eating_captured_live.png")
 								print("[IPC] Saved shiba_eating_captured_live.png")
 						)
 					"capture":
 						var img = get_viewport().get_texture().get_image()
 						if img:
-							img.save_png("/Users/macbook/.gemini/antigravity-ide/brain/775a4a21-a944-4fea-ac01-52918f0dae09/cat_live_capture.png")
-							print("[IPC] Saved cat_live_capture.png")
+							img.save_png("/Users/macbook/.gemini/antigravity-ide/brain/acb36d71-6448-4b9e-a262-8d051bcf2860/exhausted_live_capture.png")
+							print("[IPC] Saved exhausted_live_capture.png")
 
 func _input(event: InputEvent) -> void:
 	# Handle context menu mouse interception: prevent clicks on menu from bubbling to cat
